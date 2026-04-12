@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Alto — Сканер</title>
+    <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-card: #1c2333;
+            --text-primary: #e6edf3;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --success: #2ea043;
+            --danger: #f85149;
+            --warning: #d29922;
+            --border: #30363d;
+            --radius: 12px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        body {
+            font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden
+        }
+
+        /* Flash */
+        #flash-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            font-weight: 700;
+            pointer-events: auto
+        }
+
+        #flash-overlay.success {
+            display: flex;
+            background: rgba(46, 160, 67, .95);
+            animation: flashIn .2s ease-out
+        }
+
+        #flash-overlay.error {
+            display: flex;
+            background: rgba(220, 38, 38, .97);
+            animation: flashShake .4s ease
+        }
+
+        /* Hide Header and Steps */
+        .app-header,
+        .steps {
+            display: none !important;
+        }
+
+        #flash-overlay .big-icon {
+            font-size: 10rem;
+            line-height: 1;
+            margin-bottom: .5rem;
+            text-shadow: 0 4px 30px rgba(0, 0, 0, .3)
+        }
+
+        #flash-overlay .flash-text {
+            font-size: 1.3rem;
+            text-align: center;
+            padding: 0 2rem;
+            margin-bottom: 1.5rem;
+            white-space: pre-line;
+            color: rgba(255, 255, 255, .95)
+        }
+
+        #flash-overlay .tap-hint {
+            font-size: 1rem;
+            color: rgba(255, 255, 255, .6);
+            animation: tapPulse 1.5s ease infinite;
+            display: none
+        }
+
+        #flash-overlay.error .tap-hint {
+            display: block
+        }
+
+        @keyframes flashIn {
+            0% {
+                opacity: 0;
+                transform: scale(.9)
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1)
+            }
+        }
+
+        @keyframes flashShake {
+            0% {
+                transform: translateX(0)
+            }
+
+            20% {
+                transform: translateX(-12px)
+            }
+
+            40% {
+                transform: translateX(12px)
+            }
+
+            60% {
+                transform: translateX(-6px)
+            }
+
+            80% {
+                transform: translateX(6px)
+            }
+
+            100% {
+                transform: translateX(0)
+            }
+        }
+
+        @keyframes tapPulse {
+
+            0%,
+            100% {
+                opacity: .5
+            }
+
+            50% {
+                opacity: 1
+            }
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            background: rgba(13, 17, 23, .97);
+            animation: flashIn .25s ease-out
+        }
+
+        .modal-overlay.visible {
+            display: flex
+        }
+
+        .modal-overlay .modal-icon {
+            font-size: 6rem;
+            margin-bottom: 1rem
+        }
+
+        .modal-overlay .modal-title {
+            font-size: 1.8rem;
+            font-weight: 800;
+            margin-bottom: .5rem;
+            text-align: center
+        }
+
+        .modal-overlay .modal-subtitle {
+            font-size: 1.05rem;
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+            text-align: center;
+            padding: 0 1.5rem;
+            line-height: 1.5
+        }
+
+        .modal-overlay .modal-btn {
+            padding: 18px 50px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: .15s;
+            min-width: 140px
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            justify-content: center
+        }
+
+        .btn-cancel-modal {
+            background: var(--bg-secondary);
+            border: 2px solid var(--border);
+            color: var(--text-primary)
+        }
+
+        .btn-confirm-modal {
+            background: var(--warning);
+            color: #000
+        }
+
+        .btn-ok-modal {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 4px 24px rgba(88, 166, 255, .3)
+        }
+
+        /* Layout */
+        .app-container {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 16px
+        }
+
+        .app-header {
+            text-align: center;
+            padding: 12px 0 16px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 16px
+        }
+
+        .app-header h1 {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--accent)
+        }
+
+        .app-header p {
+            font-size: .82rem;
+            color: var(--text-muted);
+            margin-top: 4px
+        }
+
+        .steps {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px
+        }
+
+        .step {
+            flex: 1;
+            text-align: center;
+            padding: 10px 4px;
+            border-radius: var(--radius);
+            background: var(--bg-secondary);
+            border: 2px solid var(--border);
+            font-size: .72rem;
+            color: var(--text-muted);
+            transition: .2s
+        }
+
+        .step.active {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: rgba(88, 166, 255, .08)
+        }
+
+        .step.done {
+            border-color: var(--success);
+            color: var(--success);
+            background: rgba(46, 160, 67, .08)
+        }
+
+        .step-num {
+            font-size: 1.2rem;
+            font-weight: 700;
+            display: block;
+            margin-bottom: 2px
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 16px
+        }
+
+        .card-title {
+            font-size: .85rem;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: .5px
+        }
+
+        select,
+        .name-input {
+            width: 100%;
+            padding: 14px;
+            font-size: 1rem;
+            border-radius: var(--radius);
+            border: 2px solid var(--border);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            appearance: none;
+            cursor: pointer
+        }
+
+        select:focus,
+        .name-input:focus {
+            outline: none;
+            border-color: var(--accent)
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: .15s;
+            text-transform: uppercase;
+            letter-spacing: .5px
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff
+        }
+
+        .btn-primary:hover {
+            background: #79c0ff
+        }
+
+        .btn-primary:disabled {
+            opacity: .4;
+            cursor: not-allowed
+        }
+
+        .btn-danger {
+            background: transparent;
+            color: var(--warning);
+            border: 2px solid var(--warning);
+            margin-top: 12px
+        }
+
+        .btn-danger:hover {
+            background: rgba(210, 153, 34, .15)
+        }
+
+        .btn-back {
+            background: transparent;
+            color: var(--text-muted);
+            border: 2px solid var(--border);
+            margin-top: 12px;
+            font-size: .95rem
+        }
+
+        .btn-back:hover {
+            border-color: var(--text-muted)
+        }
+
+        /* Scanner */
+        #scanner-viewport {
+            position: relative;
+            border-radius: var(--radius);
+            overflow: hidden;
+            margin-bottom: 12px;
+            border: 2px solid var(--border);
+            background: #000;
+            min-height: 220px
+        }
+
+        #scanner-viewport video,
+        #scanner-viewport canvas {
+            width: 100% !important;
+            height: auto !important;
+            border-radius: var(--radius);
+            display: block
+        }
+
+        #scanner-viewport canvas.drawingBuffer {
+            position: absolute;
+            top: 0;
+            left: 0
+        }
+
+        .scanner-guide {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 60px;
+            border: 2px solid var(--accent);
+            border-radius: 6px;
+            pointer-events: none;
+            z-index: 5;
+            box-shadow: 0 0 0 2000px rgba(0, 0, 0, .4)
+        }
+
+        /* Torch */
+        .controls-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px
+        }
+
+        .btn-ctrl {
+            flex: 1;
+            padding: 12px;
+            font-size: .9rem;
+            font-weight: 600;
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: .15s;
+            text-align: center
+        }
+
+        .btn-ctrl.on {
+            border-color: var(--warning);
+            color: var(--warning);
+            background: rgba(210, 153, 34, .12)
+        }
+
+        /* Manual input */
+        .manual-input-area {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px
+        }
+
+        .manual-input-area input {
+            flex: 1;
+            padding: 14px;
+            font-size: 1.1rem;
+            border-radius: var(--radius);
+            border: 2px solid var(--border);
+            background: var(--bg-secondary);
+            color: #fff;
+            text-align: center
+        }
+
+        .manual-input-area input:focus {
+            outline: none;
+            border-color: var(--accent)
+        }
+
+        .manual-input-area button {
+            padding: 14px 20px;
+            font-size: 1rem;
+            font-weight: 700;
+            border: none;
+            border-radius: var(--radius);
+            background: var(--accent);
+            color: #fff;
+            cursor: pointer
+        }
+
+        .qty-input {
+            width: 70px;
+            min-width: 70px;
+            padding: 14px 8px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            border-radius: var(--radius);
+            border: 2px solid var(--border);
+            background: var(--bg-secondary);
+            color: var(--accent);
+            text-align: center
+        }
+
+        .qty-input:focus {
+            outline: none;
+            border-color: var(--accent)
+        }
+
+        .info-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px;
+            border-radius: var(--radius);
+            margin-bottom: 12px
+        }
+
+        .info-bar.box-info {
+            background: rgba(88, 166, 255, .1);
+            border: 1px solid rgba(88, 166, 255, .3)
+        }
+
+        .info-bar .label {
+            color: var(--text-muted)
+        }
+
+        .box-counter {
+            text-align: center;
+            font-size: 3rem;
+            font-weight: 800;
+            color: var(--accent);
+            padding: 8px 0;
+            line-height: 1
+        }
+
+        .box-counter small {
+            display: block;
+            font-size: .85rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            margin-top: 4px
+        }
+
+        .progress-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .75rem;
+            table-layout: fixed;
+            /* Allow wrapping */
+        }
+
+        .progress-table th,
+        .progress-table td {
+            word-wrap: break-word;
+            /* Wrap long words */
+            overflow-wrap: anywhere;
+            white-space: normal;
+            /* Force wrap */
+        }
+
+        .progress-table th {
+            text-align: left;
+            padding: 6px;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            font-weight: 600
+        }
+
+        .progress-table td {
+            padding: 6px;
+            border-bottom: 1px solid var(--border)
+        }
+
+        .progress-table tr.complete td {
+            color: var(--success)
+        }
+
+        .progress-table tr.over td {
+            color: var(--danger)
+        }
+
+        .section {
+            display: none
+        }
+
+        .section.visible {
+            display: block
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Flash overlay -->
+    <div id="flash-overlay" onclick="dismissFlash()">
+        <div class="big-icon" id="flash-icon"></div>
+        <div class="flash-text" id="flash-text"></div>
+        <div class="tap-hint">нажмите на экран чтобы продолжить</div>
+    </div>
+
+    <!-- Unified close-box modal (confirm → result in one place) -->
+    <div class="modal-overlay" id="close-box-modal">
+        <div class="modal-icon" id="cbm-icon">📦</div>
+        <div class="modal-title" id="cbm-title"></div>
+        <div class="modal-subtitle" id="cbm-subtitle"></div>
+        <div class="modal-actions" id="cbm-actions"></div>
+    </div>
+
+    <div class="app-container">
+        <div class="app-header">
+            <h1 id="app-title">📦 Alto — Сканер</h1>
+            <p id="app-subtitle">Сканируйте товары и собирайте короба</p>
+        </div>
+        <div class="steps">
+            <div class="step active" id="step1"><span class="step-num">1</span><span id="step1-label">Поставка</span>
+            </div>
+            <div class="step" id="step2"><span class="step-num">2</span><span id="step2-label">Сборка</span></div>
+        </div>
+
+        <!-- ============ SHIPMENT MODE: Step 1 — select shipment ============ -->
+        <div class="section visible" id="section-shipment">
+            <div class="card">
+                <div class="card-title">Выберите активную поставку</div>
+                <select id="shipment-select">
+                    <option value="">— Загрузка... —</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" id="btn-select-shipment" disabled onclick="selectShipment()">Начать
+                сборку</button>
+        </div>
+
+        <!-- ============ RECEPTION MODE: Step 1 — create/select reception ============ -->
+        <div class="section" id="section-reception-start">
+            <div class="card">
+                <div class="card-title">Новая приёмка</div>
+                <input type="text" class="name-input" id="reception-name" placeholder="Название приёмки">
+            </div>
+            <button class="btn btn-primary" id="btn-create-reception" onclick="createReception()">Начать
+                приёмку</button>
+            <div class="card" style="margin-top:16px" id="reception-list-card">
+                <div class="card-title">Или продолжите существующую</div>
+                <select id="reception-select">
+                    <option value="">— Загрузка... —</option>
+                </select>
+                <button class="btn btn-primary" style="margin-top:10px" id="btn-continue-reception" disabled
+                    onclick="continueReception()">Продолжить</button>
+            </div>
+
+            <div class="card" style="margin-top:16px;text-align:center">
+                <div class="card-title">📄 Импорт из Excel</div>
+                <p style="font-size:0.85rem;color:var(--text-secondary);margin:8px 0">
+                    Не хотите сканировать вручную?<br>
+                    Отправьте Excel-файл прямо в чат бота.
+                </p>
+                <button class="btn btn-back" onclick="showExcelHelp()" style="width:100%">📤 Как загрузить
+                    Excel</button>
+            </div>
+        </div>
+
+        <!-- ============ SHIPMENT MODE: Step 2 — scan with boxes ============ -->
+        <div class="section" id="section-work">
+
+
+            <div id="scanner-viewport">
+                <div class="scanner-guide"></div>
+            </div>
+
+            <div class="controls-row">
+                <button class="btn-ctrl" id="btn-torch" onclick="toggleTorch()">🔦 Фонарик</button>
+            </div>
+
+            <div class="manual-input-area" style="flex-direction:column;gap:12px;margin-bottom:20px">
+                <div id="last-barcode-display"
+                    style="text-align:center;font-size:0.9rem;color:var(--text-muted);min-height:1.2em">
+                    Нет скана
+                </div>
+                <div style="display:flex;gap:8px;width:100%;align-items:flex-end;justify-content:center">
+                    <!-- Box Display -->
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+                        <span
+                            style="font-size:0.85rem;color:var(--text-muted);font-weight:500;line-height:1">Короб</span>
+                        <div id="current-box-display"
+                            style="width:60px;height:60px;display:flex;justify-content:center;align-items:center;background:var(--bg-secondary);border:2px solid var(--border);border-radius:12px;">
+                            <span id="box-num-val" style="font-size:2rem;font-weight:900;color:var(--accent);">1</span>
+                        </div>
+                    </div>
+
+                    <!-- Qty Input -->
+                    <input type="number" id="shipment-qty" value="1" inputmode="numeric" pattern="[0-9]*"
+                        onfocus="this.select()"
+                        style="width:80px;height:60px;font-size:2rem;font-weight:700;text-align:center;border-radius:12px;border:2px solid var(--border);background:var(--bg-secondary);color:var(--accent);appearance:none;">
+
+                    <!-- OK Button -->
+                    <button class="btn btn-primary" onclick="addWithQuantity()"
+                        style="width:auto;flex:1;padding:0 10px;font-size:1.5rem;height:60px;border-radius:12px">OK</button>
+                </div>
+            </div>
+
+
+
+            <button class="btn btn-danger" onclick="showCloseBoxConfirm()">📦 Закрыть короб → следующий</button>
+
+            <div class="card" style="margin-top:16px">
+                <div class="card-title">Прогресс поставки</div>
+                <table class="progress-table">
+                    <thead style="background:var(--bg-secondary)">
+                        <tr>
+                            <th style="width:18%">ШК</th>
+                            <th style="width:28%">Артикул</th>
+                            <th style="width:15%">Размер</th>
+                            <th style="width:13%">План</th>
+                            <th style="width:13%">Факт</th>
+                            <th style="width:13%">Ост.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="progress-body"></tbody>
+                </table>
+            </div>
+            <button class="btn btn-back" onclick="goBackFromWork()">← Назад</button>
+        </div>
+
+        <!-- ============ RECEPTION MODE: Step 2 — scan without plan ============ -->
+        <div class="section" id="section-reception-work">
+            <div class="info-bar box-info">
+                <span class="label">📥 Приёмка:</span>
+                <span id="reception-name-display" style="font-weight:700;font-size:1.1rem"></span>
+            </div>
+
+            <div id="scanner-viewport-r">
+                <div class="scanner-guide"></div>
+            </div>
+
+            <div class="controls-row">
+                <button class="btn-ctrl" id="btn-torch-r" onclick="toggleTorch()">🔦 Фонарик</button>
+            </div>
+
+            <div class="manual-input-area">
+                <input type="text" id="manual-item-input-r" placeholder="Введите ШК вручную" inputmode="numeric">
+                <input type="number" id="scan-qty" class="qty-input" value="1" min="1" placeholder="Кол">
+                <button onclick="manualReceptionSubmit()">→</button>
+            </div>
+
+            <div class="card" style="margin-top:16px">
+                <div class="card-title">Отсканированные товары</div>
+                <table class="progress-table">
+                    <thead style="background:var(--bg-secondary)">
+                        <tr>
+                            <th style="width:25%">ШК</th>
+                            <th style="width:35%">Артикул</th>
+                            <th style="width:20%">Размер</th>
+                            <th style="width:20%">Кол-во</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reception-body"></tbody>
+                </table>
+            </div>
+            <button class="btn btn-back" onclick="goBackFromReception()">← Назад</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/main.py';
+        let currentShipmentId = null;
+        let currentBoxNumber = null;
+        let currentReceptionId = null;
+        let isProcessing = false;
+        let audioCtx = null;
+        let torchOn = false;
+        let scanCooldown = false;
+        let scannerRunning = false;
+        let lastScannedBarcode = '';
+
+        // Mode & role detection
+        const urlParams = new URLSearchParams(window.location.search);
+        const APP_MODE = urlParams.get('mode') || 'shipment';
+        const APP_ROLE = urlParams.get('role') || 'storekeeper';
+
+        const tgApp = window.Telegram && Telegram.WebApp;
+        if (tgApp) { tgApp.expand(); tgApp.ready(); }
+
+        /* ===================  Init  =================== */
+        document.addEventListener('DOMContentLoaded', function () {
+            if (APP_MODE === 'reception') {
+                initReceptionMode();
+            } else {
+                initShipmentMode();
+            }
+
+            // Manual input enter key
+            var manualInput = document.getElementById('manual-item-input');
+            if (manualInput) {
+                manualInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') { e.preventDefault(); manualItemSubmit(); }
+                });
+            }
+            var manualInputR = document.getElementById('manual-item-input-r');
+            if (manualInputR) {
+                manualInputR.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') { e.preventDefault(); manualReceptionSubmit(); }
+                });
+            }
+        });
+
+        function initShipmentMode() {
+            document.getElementById('app-title').textContent = '📦 Alto — Сборка';
+            document.getElementById('app-subtitle').textContent = 'Сканируйте товары и собирайте короба';
+            document.getElementById('step1-label').textContent = 'Поставка';
+            document.getElementById('step2-label').textContent = 'Сборка';
+            showSection('section-shipment');
+            loadShipments();
+        }
+
+        function initReceptionMode() {
+            document.getElementById('app-title').textContent = '📥 Alto — Приёмка';
+            document.getElementById('app-subtitle').textContent = 'Сканируйте товары для приёмки';
+            document.getElementById('step1-label').textContent = 'Приёмка';
+            document.getElementById('step2-label').textContent = 'Сканер';
+            showSection('section-reception-start');
+            loadReceptions();
+        }
+
+        /* ===================  Audio  =================== */
+        function getAudioCtx() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            return audioCtx;
+        }
+        function playBeep() {
+            try {
+                const c = getAudioCtx(), o = c.createOscillator(), g = c.createGain();
+                o.type = 'sine'; o.frequency.setValueAtTime(1760, c.currentTime);
+                g.gain.setValueAtTime(0.25, c.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.01, c.currentTime + 0.08);
+                o.connect(g); g.connect(c.destination);
+                o.start(c.currentTime); o.stop(c.currentTime + 0.08);
+            } catch (e) { }
+        }
+        function playSuccessSound() {
+            try {
+                const c = getAudioCtx(), o = c.createOscillator(), g = c.createGain();
+                o.type = 'sine';
+                o.frequency.setValueAtTime(880, c.currentTime);
+                o.frequency.setValueAtTime(1174.66, c.currentTime + 0.1);
+                g.gain.setValueAtTime(0.35, c.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.01, c.currentTime + 0.25);
+                o.connect(g); g.connect(c.destination);
+                o.start(c.currentTime); o.stop(c.currentTime + 0.25);
+            } catch (e) { }
+        }
+        function playErrorSound() {
+            try {
+                const c = getAudioCtx(), o = c.createOscillator(), g = c.createGain();
+                o.type = 'square';
+                o.frequency.setValueAtTime(200, c.currentTime);
+                o.frequency.setValueAtTime(150, c.currentTime + 0.15);
+                o.frequency.setValueAtTime(100, c.currentTime + 0.3);
+                g.gain.setValueAtTime(0.4, c.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.01, c.currentTime + 0.5);
+                o.connect(g); g.connect(c.destination);
+                o.start(c.currentTime); o.stop(c.currentTime + 0.5);
+            } catch (e) { }
+        }
+        function vibrate(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) { } }
+
+        /* ===================  Quagga2 Scanner  =================== */
+        function startScanner(targetId) {
+            if (scannerRunning) return;
+            var target = document.getElementById(targetId || 'scanner-viewport');
+
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: target,
+                    constraints: {
+                        facingMode: "environment",
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                    },
+                },
+                locate: true,
+                numOfWorkers: navigator.hardwareConcurrency || 2,
+                decoder: {
+                    readers: [
+                        "ean_reader",
+                        "ean_8_reader",
+                        "code_128_reader",
+                        "code_39_reader",
+                    ],
+                },
+                frequency: 20,
+                locator: {
+                    patchSize: "medium",
+                    halfSample: true,
+                },
+            }, function (err) {
+                if (err) {
+                    console.warn('Quagga init error:', err);
+                    target.innerHTML =
+                        '<div style="padding:24px;text-align:center;color:var(--text-muted)">' +
+                        '<p style="font-size:1.1rem;margin-bottom:8px">📷 Камера недоступна</p>' +
+                        '<p>Используйте поле ввода ниже</p></div>';
+                    return;
+                }
+                Quagga.start();
+                scannerRunning = true;
+            });
+
+            Quagga.onDetected(function (result) {
+                if (isProcessing || scanCooldown) return;
+                const code = result.codeResult.code;
+                if (!code || code.length < 4) return;
+
+                scanCooldown = true;
+                setTimeout(function () { scanCooldown = false; }, 1500);
+
+                playBeep();
+                vibrate(50);
+
+                if (APP_MODE === 'reception') {
+                    onReceptionScanned(code);
+                } else {
+                    onItemScanned(code);
+                }
+            });
+        }
+
+        function stopScanner() {
+            if (!scannerRunning) return;
+            try { Quagga.stop(); } catch (e) { }
+            scannerRunning = false;
+        }
+
+        /* ===================  Torch  =================== */
+        function toggleTorch() {
+            var vpId = APP_MODE === 'reception' ? 'scanner-viewport-r' : 'scanner-viewport';
+            const video = document.querySelector('#' + vpId + ' video');
+            if (!video || !video.srcObject) return;
+            const tracks = video.srcObject.getVideoTracks();
+            if (!tracks.length) return;
+            try {
+                torchOn = !torchOn;
+                tracks[0].applyConstraints({ advanced: [{ torch: torchOn }] });
+                var btnId = APP_MODE === 'reception' ? 'btn-torch-r' : 'btn-torch';
+                const btn = document.getElementById(btnId);
+                btn.classList.toggle('on', torchOn);
+                btn.textContent = torchOn ? '🔦 Фонарик ВКЛ' : '🔦 Фонарик';
+            } catch (e) { console.warn('Torch not supported:', e); }
+        }
+
+
+
+        /* ===================  Manual input  =================== */
+        function addWithQuantity() {
+            if (!lastScannedBarcode) {
+                showFlash('error', 'Сначала отсканируйте штрихкод');
+                return;
+            }
+            var qtyEl = document.getElementById('shipment-qty');
+            var qty = parseInt(qtyEl ? qtyEl.value : '1');
+            if (!qty || qty < 1) qty = 1;
+            onItemScanned(lastScannedBarcode, qty);
+        }
+        function manualReceptionSubmit() {
+            const inp = document.getElementById('manual-item-input-r');
+            const v = inp.value.trim();
+            if (v) { onReceptionScanned(v); inp.value = ''; }
+        }
+
+        function getReceptionQty() {
+            const el = document.getElementById('scan-qty');
+            const q = parseInt(el ? el.value : '1');
+            return (q && q > 0) ? q : 1;
+        }
+        function resetReceptionQty() {
+            const el = document.getElementById('scan-qty');
+            if (el) el.value = '1';
+        }
+
+        /* ===================  SHIPMENT: Shipments  =================== */
+        async function loadShipments() {
+            try {
+                const res = await fetch(API_BASE + '?action=shipments');
+                const data = await res.json();
+                const sel = document.getElementById('shipment-select');
+                sel.innerHTML = '';
+                if (!data.length) { sel.innerHTML = '<option value="">Нет активных поставок</option>'; return; }
+                data.forEach(function (s) {
+                    const opt = document.createElement('option');
+                    opt.value = s.id; opt.textContent = '#' + s.id + ' — ' + s.name;
+                    sel.appendChild(opt);
+                });
+                document.getElementById('btn-select-shipment').disabled = false;
+            } catch (e) { console.error('Load error:', e); }
+        }
+
+        async function selectShipment() {
+            const sel = document.getElementById('shipment-select');
+            if (!sel.value) return;
+            currentShipmentId = parseInt(sel.value);
+            try {
+                const res = await fetch(API_BASE + '?action=open_box', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ shipment_id: currentShipmentId }),
+                });
+                const data = await res.json();
+                if (data.status === 'ok') { currentBoxNumber = data.box_number; updateBoxDisplay(); }
+            } catch (e) { console.error('Open box error:', e); }
+            setStep(2);
+            showSection('section-work');
+            loadProgress();
+            startScanner('scanner-viewport');
+        }
+
+        function updateBoxDisplay() {
+            // document.getElementById('current-box-number').innerHTML = ... (removed)
+            const el = document.getElementById('box-num-val');
+            if (el) el.textContent = currentBoxNumber || '—';
+        }
+
+        /* ===================  SHIPMENT: Close Box  =================== */
+        function showCloseBoxConfirm() {
+            const modal = document.getElementById('close-box-modal');
+            const icon = document.getElementById('cbm-icon');
+            const title = document.getElementById('cbm-title');
+            const sub = document.getElementById('cbm-subtitle');
+            const actions = document.getElementById('cbm-actions');
+
+            icon.textContent = '⚠️';
+            title.textContent = 'Закрыть короб #' + currentBoxNumber + '?';
+            title.style.color = 'var(--warning)';
+            sub.textContent = 'Вы уверены? Это действие ограничит редактирование. Товары будут зафиксированы в текущем коробе.';
+            actions.innerHTML =
+                '<button class="modal-btn btn-cancel-modal" onclick="hideCloseBoxModal()">Отмена</button>' +
+                '<button class="modal-btn btn-confirm-modal" onclick="doCloseBox()">Закрыть</button>';
+            modal.classList.add('visible');
+        }
+
+        async function doCloseBox() {
+            if (!currentShipmentId) return;
+
+            const actions = document.getElementById('cbm-actions');
+            actions.querySelectorAll('button').forEach(function (b) { b.disabled = true; b.style.opacity = '0.5'; });
+
+            try {
+                const res = await fetch(API_BASE + '?action=close_box', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ shipment_id: currentShipmentId }),
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    const closedBox = currentBoxNumber;
+                    currentBoxNumber = data.box_number;
+                    playSuccessSound();
+                    vibrate([100, 50, 100]);
+                    hideCloseBoxModal();
+
+                    if (data.completed) {
+                        stopScanner();
+                        currentShipmentId = null;
+                        currentBoxNumber = null;
+                        setStep(1);
+                        showSection('section-shipment');
+                        loadShipments();
+                        showFlash('success', '🎉 Поставка полностью собрана!\nВсе товары отсканированы.');
+                    }
+                } else {
+                    playErrorSound();
+                    document.getElementById('cbm-icon').textContent = '❌';
+                    const title = document.getElementById('cbm-title');
+                    title.textContent = 'Ошибка';
+                    title.style.color = 'var(--danger)';
+                    document.getElementById('cbm-subtitle').textContent = data.message || 'Не удалось закрыть короб.';
+                    actions.innerHTML = '<button class="modal-btn btn-ok-modal" onclick="hideCloseBoxModal()">OK</button>';
+                }
+            } catch (e) {
+                playErrorSound();
+                document.getElementById('cbm-icon').textContent = '❌';
+                const title = document.getElementById('cbm-title');
+                title.textContent = 'Ошибка связи';
+                title.style.color = 'var(--danger)';
+                document.getElementById('cbm-subtitle').textContent = 'Проверьте подключение к интернету.';
+                actions.innerHTML = '<button class="modal-btn btn-ok-modal" onclick="hideCloseBoxModal()">OK</button>';
+            }
+        }
+
+        function hideCloseBoxModal() {
+            document.getElementById('close-box-modal').classList.remove('visible');
+            updateBoxDisplay();
+        }
+
+        /* ===================  SHIPMENT: Scan handler  =================== */
+        async function onItemScanned(decodedText, qty) {
+            if (isProcessing) return;
+            isProcessing = true;
+            const barcode = decodedText.trim();
+            if (!qty) {
+                var qtyEl = document.getElementById('shipment-qty');
+                qty = parseInt(qtyEl ? qtyEl.value : '1');
+                if (!qty || qty < 1) qty = 1;
+            }
+            try {
+                const res = await fetch(API_BASE + '?action=scan', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        shipment_id: currentShipmentId,
+                        box_number: currentBoxNumber,
+                        item_barcode: barcode,
+                        quantity: qty,
+                    }),
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    playSuccessSound(); vibrate(80);
+                    lastScannedBarcode = barcode;
+                    document.getElementById('last-barcode-display').textContent = 'ШК: ' + barcode;
+                    var qtyReset = document.getElementById('shipment-qty');
+                    if (qtyReset) qtyReset.value = '1';
+                    showFlash('success', '✅ ' + barcode + (qty > 1 ? ' x' + qty : '') + '\nОсталось: ' + data.remaining);
+                    loadProgress();
+                } else {
+                    playErrorSound(); vibrate([200, 100, 200, 100, 300]);
+                    showFlash('error', data.message || 'Ошибка');
+                }
+            } catch (e) {
+                playErrorSound(); vibrate([200, 100, 200]);
+                showFlash('error', 'Ошибка связи с сервером');
+            } finally {
+                isProcessing = false;
+            }
+        }
+
+        /* ===================  SHIPMENT: Progress  =================== */
+        async function loadProgress() {
+            if (!currentShipmentId) return;
+            try {
+                const res = await fetch(API_BASE + '?action=shipment&id=' + currentShipmentId);
+                const data = await res.json();
+                const tb = document.getElementById('progress-body');
+                tb.innerHTML = '';
+                data.items.forEach(function (item) {
+                    const tr = document.createElement('tr');
+                    if (item.remaining <= 0 && item.packed <= item.quantity) tr.className = 'complete';
+                    else if (item.packed > item.quantity) tr.className = 'over';
+                    tr.innerHTML = '<td>' + item.barcode + '</td><td>' + (item.article || '—') + '</td><td style="text-align:center">' + (item.size || '—') + '</td><td style="text-align:center">' + item.quantity + '</td><td style="text-align:center">' + item.packed + '</td><td style="text-align:center">' + (item.remaining > 0 ? item.remaining : '✓') + '</td>';
+                    tb.appendChild(tr);
+                });
+            } catch (e) { console.error('Progress error:', e); }
+        }
+
+        /* ===================  RECEPTION: Create / Load  =================== */
+        async function loadReceptions() {
+            try {
+                const res = await fetch(API_BASE + '?action=receptions');
+                const data = await res.json();
+                const sel = document.getElementById('reception-select');
+                sel.innerHTML = '';
+                if (!data.length) {
+                    sel.innerHTML = '<option value="">Нет активных приёмок</option>';
+                    document.getElementById('reception-list-card').style.display = 'none';
+                    return;
+                }
+                document.getElementById('reception-list-card').style.display = 'block';
+                data.forEach(function (r) {
+                    const opt = document.createElement('option');
+                    opt.value = r.id; opt.textContent = '#' + r.id + ' — ' + r.name;
+                    sel.appendChild(opt);
+                });
+                document.getElementById('btn-continue-reception').disabled = false;
+            } catch (e) { console.error('Load receptions error:', e); }
+        }
+
+        async function createReception() {
+            const nameInput = document.getElementById('reception-name');
+            const name = nameInput.value.trim();
+            if (!name) { nameInput.focus(); return; }
+
+            try {
+                const res = await fetch(API_BASE + '?action=create_reception', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name }),
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    currentReceptionId = data.id;
+                    document.getElementById('reception-name-display').textContent = name;
+                    setStep(2);
+                    showSection('section-reception-work');
+                    loadReceptionProgress();
+                    startScanner('scanner-viewport-r');
+                } else {
+                    showFlash('error', data.message || 'Ошибка создания');
+                }
+            } catch (e) {
+                showFlash('error', 'Ошибка связи с сервером');
+            }
+        }
+
+        async function continueReception() {
+            const sel = document.getElementById('reception-select');
+            if (!sel.value) return;
+            currentReceptionId = parseInt(sel.value);
+            var selectedText = sel.options[sel.selectedIndex].textContent;
+            document.getElementById('reception-name-display').textContent = selectedText;
+            setStep(2);
+            showSection('section-reception-work');
+            loadReceptionProgress();
+            startScanner('scanner-viewport-r');
+        }
+
+        /* ===================  RECEPTION: Scan handler  =================== */
+        async function onReceptionScanned(decodedText) {
+            if (isProcessing) return;
+            isProcessing = true;
+            const barcode = decodedText.trim();
+            const qty = getReceptionQty();
+            try {
+                const res = await fetch(API_BASE + '?action=reception_scan', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        reception_id: currentReceptionId,
+                        barcode: barcode,
+                        quantity: qty,
+                    }),
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    playSuccessSound(); vibrate(80);
+                    showFlash('success', '✅ ' + barcode + (qty > 1 ? ' x' + qty : '') + '\nКол-во: ' + data.quantity);
+                    resetReceptionQty();
+                    loadReceptionProgress();
+                } else {
+                    playErrorSound(); vibrate([200, 100, 200, 100, 300]);
+                    showFlash('error', data.message || 'Ошибка');
+                }
+            } catch (e) {
+                playErrorSound(); vibrate([200, 100, 200]);
+                showFlash('error', 'Ошибка связи с сервером');
+            }
+        }
+
+        /* ===================  RECEPTION: Progress  =================== */
+        async function loadReceptionProgress() {
+            if (!currentReceptionId) return;
+            try {
+                const res = await fetch(API_BASE + '?action=reception&id=' + currentReceptionId);
+                const data = await res.json();
+                const tb = document.getElementById('reception-body');
+                tb.innerHTML = '';
+                data.items.forEach(function (item) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = '<td>' + item.barcode + '</td><td>' + (item.article || '—') + '</td><td>' + (item.size || '—') + '</td><td>' + item.quantity + '</td>';
+                    tb.appendChild(tr);
+                });
+            } catch (e) { console.error('Reception progress error:', e); }
+        }
+
+        /* ===================  Back buttons  =================== */
+        function goBackFromWork() {
+            stopScanner();
+            setStep(1);
+            showSection('section-shipment');
+            // Don't clear currentShipmentId — user can re-enter
+        }
+
+        function goBackFromReception() {
+            stopScanner();
+            setStep(1);
+            showSection('section-reception-start');
+            loadReceptions();
+            // Don't clear currentReceptionId — user can resume
+        }
+
+        /* ===================  Excel Help  =================== */
+        function showExcelHelp() {
+            var msg = '📄 Инструкция по загрузке Excel:\n\n' +
+                '1. Закройте это окно\n' +
+                '2. В чате бота отправьте Excel-файл (.xlsx)\n' +
+                '3. Имя файла = название приёмки\n\n' +
+                'Формат файла:\n' +
+                '• 1-й столбец — штрихкод\n' +
+                '• 2-й столбец — количество\n' +
+                '• 3-й столбец — артикул (необяз.)\n' +
+                '• 4-й столбец — размер (необяз.)';
+            alert(msg);
+            if (tgApp) tgApp.close();
+        }
+
+        /* ===================  Flash  =================== */
+        function showFlash(type, msg) {
+            const ov = document.getElementById('flash-overlay');
+            document.getElementById('flash-icon').textContent = type === 'success' ? '✓' : '✕';
+            document.getElementById('flash-text').textContent = msg;
+            ov.className = type;
+            if (type === 'success') setTimeout(dismissFlash, 1000);
+        }
+        function dismissFlash() {
+            document.getElementById('flash-overlay').className = '';
+            isProcessing = false;
+        }
+
+        /* ===================  Navigation  =================== */
+        function setStep(n) {
+            for (var i = 1; i <= 2; i++) {
+                var el = document.getElementById('step' + i);
+                el.classList.remove('active', 'done');
+                if (i < n) el.classList.add('done');
+                if (i === n) el.classList.add('active');
+            }
+        }
+        function showSection(id) {
+            document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('visible'); });
+            document.getElementById(id).classList.add('visible');
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Alto — Сканер</title>
+    <meta name="description" content="Alto Fulfillment — Сканер штрихкодов">
+    <style>
+        #reader {
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid var(--border);
+            background: #000;
+        }
+        #reader video {
+            object-fit: cover;
+            border-radius: 12px;
+        }
+        
+        /* Modal UI for packing */
+        .pack-modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8); z-index: 9999;
+            display: none; align-items: center; justify-content: center;
+            padding: 16px; backdrop-filter: blur(4px);
+        }
+        .pack-modal-content {
+            background: var(--bg-card); width: 100%; max-width: 400px;
+            border-radius: 20px; border: 1px solid var(--border);
+            padding: 24px; text-align: center;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+    <!-- ============ HTTPS Warning ============ -->
+    <div id="https-warning" style="display:none;position:fixed;top:0;left:0;right:0;z-index:10001;padding:12px 16px;background:rgba(245,158,11,0.15);border-bottom:1px solid rgba(245,158,11,0.3);text-align:center">
+        <span style="color:#fbbf24;font-weight:600;font-size:0.85rem">⚠️ Камера работает только по HTTPS. Используйте ручной ввод.</span>
+    </div>
+
+    <!-- ============ Flash overlay ============ -->
+    <div id="scanner-flash" class="scanner-flash" style="display:none" onclick="dismissFlash()">
+        <div class="flash-icon" id="flash-icon"></div>
+        <div class="flash-text" id="flash-text"></div>
+        <div style="font-size:1rem;color:rgba(255,255,255,0.5);animation:tapPulse 1.5s ease infinite;margin-top:16px">нажмите чтобы продолжить</div>
+    </div>
+
+    <style>@keyframes tapPulse { 0%,100%{opacity:.5} 50%{opacity:1} }</style>
+
+    <!-- ============ Main ============ -->
+    <div style="max-width:480px;margin:0 auto;padding:16px">
+
+        <!-- Top bar -->
+        <div class="flex items-center justify-between mb-4">
+            <button onclick="goToDashboard()" class="text-sm px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition">← Dashboard</button>
+            <span class="text-lg font-bold" id="scanner-title" style="color:var(--accent)">📦 Сканер</span>
+            <span style="width:80px"></span>
+        </div>
+
+        <!-- ============ SHIPMENT SETUP ============ -->
+        <div id="shipment-setup" style="display:none">
+            <div class="section-card mb-4">
+                <div class="section-title">Выберите активную поставку</div>
+                <select id="shipment-select" class="w-full px-4 py-3 rounded-xl border border-gray-700 bg-gray-800 text-white focus:outline-none focus:border-blue-500 transition mb-3">
+                    <option value="">— Загрузка... —</option>
+                </select>
+                <button id="btn-start-shipment" disabled onclick="startShipmentWork()" class="w-full py-3 rounded-xl font-bold text-white transition" style="background:linear-gradient(135deg,#3b82f6,#6366f1)">Начать сборку</button>
+            </div>
+        </div>
+
+        <!-- ============ RECEPTION SETUP ============ -->
+        <div id="reception-setup" style="display:none">
+            <div class="section-card mb-4">
+                <div class="section-title">Новая приёмка</div>
+                <input type="text" id="reception-name-input" placeholder="Название приёмки" class="w-full px-4 py-3 rounded-xl border border-gray-700 bg-gray-800/50 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition mb-3">
+                <button onclick="createNewReception()" class="w-full py-3 rounded-xl font-bold text-white transition" style="background:linear-gradient(135deg,#3b82f6,#6366f1)">Начать приёмку</button>
+            </div>
+
+            <div class="section-card" id="reception-list-card" style="display:none">
+                <div class="section-title">Или продолжите существующую</div>
+                <select id="reception-select" class="w-full px-4 py-3 rounded-xl border border-gray-700 bg-gray-800 text-white focus:outline-none focus:border-blue-500 transition mb-3">
+                    <option value="">— Загрузка... —</option>
+                </select>
+                <button id="btn-continue-reception" disabled onclick="continueReception()" class="w-full py-3 rounded-xl font-bold text-white transition" style="background:linear-gradient(135deg,#22c55e,#16a34a)">Продолжить</button>
+            </div>
+        </div>
+
+        <!-- ============ SCANNER WORK AREA ============ -->
+        <div id="scanner-work" style="display:none">
+
+            <!-- Total Progress Bar -->
+            <div id="packing-progress" class="progress-container" style="display:none"></div>
+
+            <!-- Camera viewport -->
+            <div id="reader" class="mb-4"></div>
+
+            <!-- Controls row -->
+            <div class="flex gap-2 mb-3">
+                <button id="btn-torch" onclick="toggleTorch()" class="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-gray-700 bg-gray-800 text-gray-400 hover:bg-gray-700 transition">🔦 Фонарик</button>
+            </div>
+
+            <!-- Barcode display -->
+            <div id="last-barcode-display" class="text-center text-sm mb-3" style="color:var(--text-muted);min-height:1.2em">Нет скана</div>
+
+            <!-- ТЗ Display (shown naturally for shipments/receptions. Pack uses modal) -->
+            <div id="tz-display" class="tz-display" style="display:none"></div>
+
+            <!-- Shipment controls (Assembly) -->
+            <div id="shipment-controls" style="display:none">
+                <div class="flex gap-2 items-end justify-center mb-3">
+                    <!-- Box Display -->
+                    <div class="flex flex-col items-center gap-1">
+                        <span class="text-xs font-medium" style="color:var(--text-muted)">Короб</span>
+                        <div class="flex items-center justify-center rounded-xl border-2 border-gray-700 bg-gray-800" style="width:60px;height:60px">
+                            <span id="box-num-val" class="text-3xl font-black" style="color:var(--accent)">1</span>
+                        </div>
+                    </div>
+                    <!-- Qty Input -->
+                    <div class="flex flex-col items-center gap-1">
+                        <span class="text-xs font-medium" style="color:var(--text-muted)">Кол-во</span>
+                        <input
+                            type="number"
+                            id="scan-qty"
+                            value="1"
+                            inputmode="numeric"
+                            pattern="[0-9]*"
+                            min="1"
+                            onfocus="this.select()"
+                            class="text-3xl font-bold text-center rounded-xl border-2 border-gray-700 bg-gray-800 focus:outline-none focus:border-blue-500 transition"
+                            style="width:80px;height:60px;color:var(--accent);appearance:none;-moz-appearance:textfield"
+                        >
+                    </div>
+                    <!-- Submit Box Button -->
+                    <button
+                        onclick="submitShipmentScan()"
+                        class="rounded-xl font-bold text-white text-lg transition"
+                        style="height:60px;flex:1;background:linear-gradient(135deg,#3b82f6,#6366f1);min-width:90px"
+                    >В короб</button>
+                </div>
+                <!-- Close box button -->
+                <button onclick="closeBox()" class="w-full py-3 rounded-xl font-bold transition border-2 mt-2" style="border-color:var(--warning);color:var(--warning);background:transparent">
+                    📦 Закрыть короб → следующий
+                </button>
+            </div>
+
+            <!-- Pack controls (Only used to show mode marker now, logic is in modal) -->
+            <div id="pack-controls" style="display:none">
+                <div class="text-center font-bold" style="color:var(--text-muted); font-size:0.9rem; margin-bottom:12px;">
+                    Сканируйте товар для открытия ТЗ
+                </div>
+            </div>
+
+            <!-- Reception controls -->
+            <div id="reception-controls" style="display:none">
+                <div class="flex items-center gap-2 mb-2 px-1" style="justify-content:center">
+                    <span class="text-sm" style="color:var(--text-muted)">📥 Приёмка:</span>
+                    <span id="reception-name-display" class="text-sm font-bold" style="color:var(--accent)"></span>
+                </div>
+                <div class="flex gap-2 items-end justify-center mb-3">
+                    <input
+                        type="number"
+                        id="scan-qty-r"
+                        value="1"
+                        inputmode="numeric"
+                        pattern="[0-9]*"
+                        min="1"
+                        onfocus="this.select()"
+                        class="text-3xl font-bold text-center rounded-xl border-2 border-gray-700 bg-gray-800 focus:outline-none focus:border-blue-500 transition"
+                        style="width:80px;height:60px;color:var(--accent);appearance:none;-moz-appearance:textfield"
+                    >
+                    <button onclick="addWithQuantityReception()" class="rounded-xl font-bold text-white text-2xl transition"
+                        style="height:60px;flex:1;background:linear-gradient(135deg,#22c55e,#16a34a);min-width:70px">OK</button>
+                </div>
+            </div>
+
+            <!-- Manual input -->
+            <div class="flex gap-2 mb-4">
+                <input type="text" id="manual-barcode-input" placeholder="Ввести ШК вручную" inputmode="numeric"
+                    class="flex-1 px-4 py-3 rounded-xl border border-gray-700 bg-gray-800/50 text-white text-center placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();manualScanSubmit()}">
+                <button onclick="manualScanSubmit()" class="px-5 py-3 rounded-xl font-bold text-white transition" style="background:var(--accent)">→</button>
+            </div>
+
+            <!-- Progress table -->
+            <div class="section-card">
+                <div class="section-title">Прогресс</div>
+                <div style="overflow-x:auto">
+                    <table class="data-table" style="font-size:0.75rem">
+                        <thead>
+                            <tr>
+                                <th style="width:18%">ШК</th>
+                                <th style="width:28%">Артикул</th>
+                                <th style="width:14%">Размер</th>
+                                <th style="width:13%">План</th>
+                                <th style="width:13%">Факт</th>
+                                <th style="width:14%">Ост.</th>
+                            </tr>
+                        </thead>
+                        <tbody id="progress-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Back button -->
+            <button onclick="goBack()" class="w-full py-3 rounded-xl font-semibold mt-4 bg-gray-800 hover:bg-gray-700 text-gray-400 transition">← Назад</button>
+        </div>
+    </div>
+
+    <!-- ============ PACKING MODAL ============ -->
+    <div id="pack-modal" class="pack-modal-overlay">
+        <div class="pack-modal-content">
+            <h3 class="text-xl font-bold mb-4" style="color:var(--accent)">🛠 Задание на упаковку</h3>
+            <div id="pack-modal-tz" class="mb-6" style="text-align:left; background:var(--bg-body); padding:16px; border-radius:12px; border:1px solid var(--border);"></div>
+
+            <!-- Step 1: Confirm -->
+            <div id="pack-step-1">
+                <button onclick="startPackTimer()" class="w-full py-4 rounded-xl font-bold text-white text-lg transition" style="background:linear-gradient(135deg,#3b82f6,#6366f1); box-shadow:0 10px 20px rgba(59,130,246,0.3)">
+                    ОК, ПРИСТУПАЮ
+                </button>
+            </div>
+
+            <!-- Step 2: Quantity Input -->
+            <div id="pack-step-2" style="display:none">
+                <div class="flex flex-col items-center gap-2 mb-4">
+                    <span class="text-sm font-medium" style="color:var(--text-muted)">Количество упаковано:</span>
+                    <input type="number" id="pack-quantity" value="1" inputmode="numeric" onfocus="this.select()"
+                        class="text-4xl font-black text-center rounded-xl bg-gray-800 text-white w-24 h-16 focus:outline-none focus:border-blue-500 border-2 border-gray-700" style="color:var(--accent)">
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="cancelPackModal()" class="w-1/3 py-4 rounded-xl font-bold text-white transition bg-gray-700 border border-gray-600">Отмена</button>
+                    <button onclick="submitGlobalPack()" class="w-2/3 py-4 rounded-xl font-black text-white text-xl tracking-wide transition" style="background:linear-gradient(135deg,#22c55e,#16a34a); box-shadow:0 10px 20px rgba(34,197,94,0.3)">
+                        УПАКОВАТЬ
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/scanner.js"></script>
+    <script>
+        // Fix: use scan-qty-r for reception mode
+        function addWithQuantityReception() {
+            if (!scannerState.lastScannedBarcode && scannerState.mode === 'reception') {
+                showFlash('error', 'Сначала отсканируйте штрихкод');
+                return;
+            }
+            // Use reception qty field
+            const qtyEl = document.getElementById('scan-qty-r');
+            const mainQtyEl = document.getElementById('scan-qty');
+            if (qtyEl && mainQtyEl) {
+                mainQtyEl.value = qtyEl.value;
+            }
+            onReceptionScanned(scannerState.lastScannedBarcode || '');
+            if (qtyEl) { qtyEl.value = '1'; qtyEl.blur(); }
+        }
+    </script>
+</body>
+</html>

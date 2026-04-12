@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alto — Dashboard</title>
+    <meta name="description" content="Alto Fulfillment — Панель управления складом">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                }
+            }
+        }
+    </script>
+</head>
+<body>
+    <!-- ============ Sidebar ============ -->
+    <nav class="nav-sidebar" id="sidebar">
+        <div class="logo">Alto</div>
+
+        <div class="nav-item active" data-section="home" onclick="showSection('home')">
+            <span>🏠</span> <span>Главная</span>
+        </div>
+
+        <div data-roles="admin,manager">
+            <div class="nav-item" data-section="my-receptions" onclick="showSection('my-receptions')">
+                <span>📂</span> <span>Мои приёмки</span>
+            </div>
+            <div class="nav-item" data-section="my-shipments" onclick="showSection('my-shipments')">
+                <span>📋</span> <span>Мои поставки</span>
+            </div>
+        </div>
+
+        <div class="nav-divider" data-roles="admin,manager"></div>
+
+        <div data-roles="admin,manager">
+            <div class="nav-item" data-section="analytics" onclick="showSection('analytics')">
+                <span>📈</span> <span>Аналитика</span>
+            </div>
+            <div class="nav-item" data-section="stock" onclick="showSection('stock')">
+                <span>📊</span> <span>Учёт товара</span>
+            </div>
+            <div class="nav-item" data-section="history" onclick="showSection('history')">
+                <span>📜</span> <span>История</span>
+            </div>
+        </div>
+
+        <div class="nav-divider" data-roles="admin,manager"></div>
+
+        <div data-roles="admin,manager">
+            <div class="nav-item" data-section="users" onclick="showSection('users')">
+                <span>👥</span> <span>Персонал</span>
+            </div>
+        </div>
+
+        <!-- Spacer -->
+        <div style="flex:1"></div>
+
+        <!-- User info -->
+        <div style="padding:12px;border-top:1px solid var(--border)">
+            <div style="font-weight:600;font-size:0.9rem" id="user-display-name"></div>
+            <div style="font-size:0.8rem;color:var(--text-muted)" id="user-display-role"></div>
+            <button
+                onclick="API.logout()"
+                class="mt-3 w-full text-sm py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition font-medium"
+            >Выйти</button>
+        </div>
+    </nav>
+
+    <!-- ============ Mobile Header ============ -->
+    <div class="fixed top-0 left-0 right-0 z-50 md:hidden flex items-center justify-between px-4 py-3" style="background:var(--bg-secondary);border-bottom:1px solid var(--border)">
+        <button id="menu-toggle" class="text-2xl">☰</button>
+        <span style="font-weight:800;background:linear-gradient(135deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Alto</span>
+        <span></span>
+    </div>
+
+    <!-- ============ Main Content ============ -->
+    <div class="main-content" style="padding-top:24px">
+        <!-- Mobile spacing -->
+        <div class="md:hidden" style="height:48px"></div>
+
+        <!-- ====== HOME ====== -->
+        <div class="content-section" id="section-home">
+            <h1 class="text-2xl font-bold mb-6" style="background:linear-gradient(135deg,#e5e7eb,#9ca3af);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Панель управления</h1>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Left: Приёмка -->
+                <div>
+                    <h2 class="text-lg font-bold mb-4 flex items-center gap-2" style="color:var(--accent)">
+                        <span>📥</span> Приёмка
+                    </h2>
+                    <div class="flex flex-col gap-3">
+                        <button onclick="showUploadModal('reception')" class="dash-btn accent" data-roles="admin,manager">
+                            <span class="btn-icon">📥</span>
+                            <div>
+                                <div>Создать приёмку</div>
+                                <div style="font-size:0.75rem;font-weight:400;color:var(--text-muted)">Загрузить Excel файл</div>
+                            </div>
+                        </button>
+                        <a href="/scanner?mode=reception" class="dash-btn success">
+                            <span class="btn-icon">📲</span>
+                            <div>
+                                <div>Сделать приёмку</div>
+                                <div style="font-size:0.75rem;font-weight:400;color:var(--text-muted)">Сканировать товары</div>
+                            </div>
+                        </a>
+                        <button onclick="showSection('my-receptions')" class="dash-btn" data-roles="admin,manager">
+                            <span class="btn-icon">📂</span>
+                            <div>Мои приёмки</div>
+                        </button>
+                        <a href="/scanner?mode=global_pack" class="dash-btn success" data-roles="admin,manager,packer">
+                            <span class="btn-icon">📦</span>
+                            <div>
+                                <div>Глобальная Упаковка</div>
+                                <div style="font-size:0.75rem;font-weight:400;color:var(--text-muted)">Мульти-ТЗ (Упаковщица)</div>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Right: Поставка -->
+                <div>
+                    <h2 class="text-lg font-bold mb-4 flex items-center gap-2" style="color:#a78bfa">
+                        <span>📦</span> Поставка
+                    </h2>
+                    <div class="flex flex-col gap-3">
+                        <button onclick="showUploadModal('shipment')" class="dash-btn accent" data-roles="admin,manager">
+                            <span class="btn-icon">📦</span>
+                            <div>
+                                <div>Создать поставку</div>
+                                <div style="font-size:0.75rem;font-weight:400;color:var(--text-muted)">Загрузить Excel файл</div>
+                            </div>
+                        </button>
+                        <a href="/scanner?mode=shipment" class="dash-btn success">
+                            <span class="btn-icon">🛠️</span>
+                            <div>
+                                <div>Собрать коробки</div>
+                                <div style="font-size:0.75rem;font-weight:400;color:var(--text-muted)">Быстрое сканирование (Кладовщик)</div>
+                            </div>
+                        </a>
+                        <button onclick="showSection('my-shipments')" class="dash-btn" data-roles="admin,manager">
+                            <span class="btn-icon">📋</span>
+                            <div>Мои поставки</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom zone -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8" data-roles="admin,manager">
+                <button onclick="showSection('analytics')" class="dash-btn accent">
+                    <span class="btn-icon">📈</span>
+                    <div>Аналитика KPI</div>
+                </button>
+                <button onclick="showSection('stock')" class="dash-btn">
+                    <span class="btn-icon">📊</span>
+                    <div>Учёт товара</div>
+                </button>
+                <button onclick="showSection('history')" class="dash-btn">
+                    <span class="btn-icon">📜</span>
+                    <div>История</div>
+                </button>
+            </div>
+
+            <div class="mt-6" data-roles="admin,manager">
+                <button onclick="showSection('users')" class="dash-btn" style="max-width:320px">
+                    <span class="btn-icon">👥</span>
+                    <div>Управление персоналом</div>
+                </button>
+            </div>
+        </div>
+
+        <!-- ====== ANALYTICS ====== -->
+        <div class="content-section" id="section-analytics" style="display:none">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-xl font-bold">📈 Аналитика KPI</h1>
+                <button onclick="showSection('home')" class="text-sm px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition">← Назад</button>
+            </div>
+
+            <!-- Analytics Tabs -->
+            <div class="analytics-tabs" id="analytics-tabs">
+                <button class="analytics-tab active" onclick="switchAnalyticsTab('shift')" data-tab="shift">📊 Итог смены</button>
+                <button class="analytics-tab" onclick="switchAnalyticsTab('packers')" data-tab="packers">👩‍🏭 Упаковщицы</button>
+                <button class="analytics-tab" onclick="switchAnalyticsTab('warehousemen')" data-tab="warehousemen">🏗️ Кладовщики</button>
+            </div>
+
+            <!-- Period Selector (hidden for shift tab) -->
+            <div class="period-pills" id="analytics-period" style="display:none">
+                <button class="period-pill active" onclick="setAnalyticsPeriod('day')" data-period="day">День</button>
+                <button class="period-pill" onclick="setAnalyticsPeriod('week')" data-period="week">Неделя</button>
+                <button class="period-pill" onclick="setAnalyticsPeriod('month')" data-period="month">Месяц</button>
+                <button class="period-pill" onclick="setAnalyticsPeriod('all')" data-period="all">Всё время</button>
+                
+                <button onclick="downloadEmployeePackingReport()" class="text-sm px-3 py-1.5 rounded-lg font-medium ml-auto" style="background:linear-gradient(135deg, #a855f7, #6366f1); color:white; border:none; cursor:pointer;">📥 Отчёт по сотрудникам (Excel)</button>
+            </div>
+
+            <!-- Shift hours selector -->
+            <div class="period-pills" id="shift-hours-pills">
+                <button class="period-pill active" onclick="setShiftHours(12)" data-hours="12">12 часов</button>
+                <button class="period-pill" onclick="setShiftHours(24)" data-hours="24">24 часа</button>
+                <button class="period-pill" onclick="setShiftHours(48)" data-hours="48">48 часов</button>
+            </div>
+
+            <!-- Analytics Content -->
+            <div id="analytics-content"></div>
+        </div>
+
+        <!-- ====== MY SHIPMENTS ====== -->
+        <div class="content-section" id="section-my-shipments" style="display:none">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-xl font-bold">📋 Мои поставки</h1>
+                <button onclick="showSection('home')" class="text-sm px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition">← Назад</button>
+            </div>
+            <div id="shipments-list"></div>
+        </div>
+
+        <!-- ====== MY RECEPTIONS ====== -->
+        <div class="content-section" id="section-my-receptions" style="display:none">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-xl font-bold">📂 Мои приёмки</h1>
+                <button onclick="showSection('home')" class="text-sm px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition">← Назад</button>
+            </div>
+            <div id="receptions-list"></div>
+        </div>
+
+        <!-- ====== STOCK ====== -->
+        <div class="content-section" id="section-stock" style="display:none">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-xl font-bold">📊 Учёт товара</h1>
+                <div class="flex gap-2">
+                    <button id="stock-archive-toggle" onclick="toggleStockArchive()" class="text-sm px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition">📂 Архив</button>
+                    <button onclick="showSection('home')" class="text-sm px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition">← Назад</button>
+                </div>
+            </div>
+            <div id="stock-list"></div>
+        </div>
+
+        <!-- ====== HISTORY ====== -->
+        <div class="content-section" id="section-history" style="display:none">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-xl font-bold">📜 История</h1>
+                <button onclick="showSection('home')" class="text-sm px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition">← Назад</button>
+            </div>
+            <div class="flex gap-2 mb-4">
+                <button id="history-tab-shipments" class="px-4 py-2 rounded-lg text-sm font-semibold transition active"
+                    style="background:rgba(59,130,246,0.15);color:#93c5fd;border:1px solid rgba(59,130,246,0.3)"
+                    onclick="switchHistoryTab('shipments')">📦 Поставки</button>
+                <button id="history-tab-receptions" class="px-4 py-2 rounded-lg text-sm font-semibold transition"
+                    style="background:var(--bg-card);color:var(--text-muted);border:1px solid var(--border)"
+                    onclick="switchHistoryTab('receptions')">📥 Приёмки</button>
+            </div>
+            <div id="history-list"></div>
+        </div>
+
+        <!-- ====== USERS ====== -->
+        <div class="content-section" id="section-users" style="display:none">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-xl font-bold">👥 Персонал</h1>
+                <div class="flex gap-2">
+                    <button onclick="showCreateUserModal()" class="text-sm px-4 py-2 rounded-lg font-semibold transition" style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:white">+ Создать</button>
+                    <button onclick="showSection('home')" class="text-sm px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition">← Назад</button>
+                </div>
+            </div>
+            <div id="users-list"></div>
+        </div>
+    </div>
+
+    <!-- ============ Upload Modal ============ -->
+    <div class="modal-overlay" id="upload-modal">
+        <div class="modal-content">
+            <h2 class="text-lg font-bold mb-4" id="upload-modal-title">Загрузка Excel</h2>
+            <div id="upload-form" data-type="shipment">
+                <div class="file-drop-zone mb-4" id="upload-drop-zone"
+                     onclick="document.getElementById('upload-file').click()">
+                    <div style="font-size:2.5rem;margin-bottom:8px">📎</div>
+                    <p class="text-sm" style="color:var(--text-muted)">Нажмите или перетащите .xlsx файл</p>
+                    <p class="text-xs mt-2" style="color:var(--text-muted)">Имя файла = название. Столбцы: ШК, Кол-во, Артикул, Размер</p>
+                    <input type="file" id="upload-file" accept=".xlsx" style="display:none" onchange="onUploadFileSelected(this)">
+                </div>
+                <div id="upload-info" class="text-sm mb-4" style="color:var(--accent);text-align:center;font-weight:600"></div>
+                <div class="flex gap-3">
+                    <button onclick="closeUploadModal()" class="flex-1 py-2.5 rounded-xl font-semibold bg-gray-800 hover:bg-gray-700 text-gray-400 transition">Отмена</button>
+                    <button id="upload-btn" onclick="submitUpload()" class="flex-1 py-2.5 rounded-xl font-semibold text-white transition" style="background:linear-gradient(135deg,#3b82f6,#6366f1)">Загрузить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Create User Modal ============ -->
+    <div class="modal-overlay" id="create-user-modal">
+        <div class="modal-content">
+            <h2 class="text-lg font-bold mb-4">👤 Создать пользователя</h2>
+            <div class="mb-3">
+                <label class="block text-sm mb-1" style="color:var(--text-muted)">Логин</label>
+                <input type="text" id="new-username" placeholder="username" class="w-full px-4 py-2.5 rounded-xl border border-gray-700 bg-gray-800/50 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition">
+            </div>
+            <div class="mb-3">
+                <label class="block text-sm mb-1" style="color:var(--text-muted)">ФИО</label>
+                <input type="text" id="new-fullname" placeholder="Иванова Мария Петровна" class="w-full px-4 py-2.5 rounded-xl border border-gray-700 bg-gray-800/50 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition">
+            </div>
+            <div class="mb-3">
+                <label class="block text-sm mb-1" style="color:var(--text-muted)">Пароль</label>
+                <input type="password" id="new-password" placeholder="••••••" class="w-full px-4 py-2.5 rounded-xl border border-gray-700 bg-gray-800/50 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm mb-1" style="color:var(--text-muted)">Роль</label>
+                <select id="new-role" class="w-full px-4 py-2.5 rounded-xl border border-gray-700 bg-gray-800 text-white focus:outline-none focus:border-blue-500 transition">
+                    <option value="packer">Упаковщица</option>
+                    <option value="warehouseman">Кладовщик</option>
+                </select>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="closeCreateUserModal()" class="flex-1 py-2.5 rounded-xl font-semibold bg-gray-800 hover:bg-gray-700 text-gray-400 transition">Отмена</button>
+                <button onclick="createUser()" class="flex-1 py-2.5 rounded-xl font-semibold text-white transition" style="background:linear-gradient(135deg,#3b82f6,#6366f1)">Создать</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Add Items Modal ============ -->
+    <div class="modal-overlay" id="add-items-modal">
+        <div class="modal-content">
+            <h2 class="text-lg font-bold mb-4" id="add-items-modal-title">➕ Добавить товар в поставку</h2>
+            <div>
+                <div class="file-drop-zone mb-4" id="add-items-drop-zone"
+                     onclick="document.getElementById('add-items-file').click()">
+                    <div style="font-size:2.5rem;margin-bottom:8px">📎</div>
+                    <p class="text-sm" style="color:var(--text-muted)">Нажмите или перетащите .xlsx файл</p>
+                    <p class="text-xs mt-2" style="color:var(--text-muted)">Столбцы: ШК, Кол-во, Артикул (необяз.), Размер (необяз.)</p>
+                    <input type="file" id="add-items-file" accept=".xlsx" style="display:none" onchange="document.getElementById('add-items-info').textContent = this.files[0]?.name || ''">
+                </div>
+                <div id="add-items-info" class="text-sm mb-4" style="color:var(--accent);text-align:center;font-weight:600"></div>
+                <div class="flex gap-3">
+                    <button onclick="closeAddItemsModal()" class="flex-1 py-2.5 rounded-xl font-semibold bg-gray-800 hover:bg-gray-700 text-gray-400 transition">Отмена</button>
+                    <button id="add-items-btn" onclick="submitAddItems()" class="flex-1 py-2.5 rounded-xl font-semibold text-white transition" style="background:linear-gradient(135deg,#10b981,#059669)">Загрузить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

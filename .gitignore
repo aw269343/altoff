@@ -1,0 +1,24 @@
+# Virtual environments
+venv/
+env/
+.env/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE / Editor folders
+.vscode/
+.idea/
+*.swp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Project specifics
+*.db
+*.sqlite3
+*.log

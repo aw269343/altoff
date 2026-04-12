@@ -1,0 +1,14 @@
+# .htaccess — CGI-маршрутизация для ISPmanager (Reg.ru)
+# Все запросы к /main.py обрабатываются как CGI-скрипт
+
+Options +ExecCGI
+AddHandler cgi-script .py
+
+# Перенаправление webhook (/) → main.py
+RewriteEngine On
+RewriteBase /
+
+# Если запрос не к существующему файлу/директории — отправить на main.py
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ main.py [L,QSA]
