@@ -11,8 +11,7 @@ load_dotenv()
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # --- Database ---
-DATABASE_PATH = os.path.join(BASE_DIR, "fulfillment.db")
-DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{DATABASE_PATH}")
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:////var/www/alto_wms/fulfillment.db")
 
 # --- JWT ---
 SECRET_KEY = os.environ.get("SECRET_KEY", secrets.token_urlsafe(64))

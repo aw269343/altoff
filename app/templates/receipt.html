@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Alto — Упаковка</title>
+    <title>Alto — Приемка</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/static/css/style.css">
     <style>
@@ -19,21 +19,26 @@
     <div class="max-w-md mx-auto w-full flex-1 flex flex-col">
         <div class="flex justify-between items-center mb-6">
             <button onclick="window.location.href='/dashboard'" class="px-4 py-2 bg-gray-800 rounded-xl font-bold text-gray-400">← Назад</button>
-            <h1 class="text-xl font-black text-blue-400">Упаковка</h1>
+            <h1 class="text-xl font-black text-blue-400">Приемка</h1>
             <div class="w-20"></div>
         </div>
 
-        <div id="scan-panel" class="flex-1 flex flex-col">
+        <div id="setup-panel" class="bg-gray-800 p-6 rounded-2xl mb-4 border border-gray-700">
+            <h2 class="text-lg font-bold mb-4">Выбор приёмки</h2>
+            <select id="reception-select" class="w-full bg-gray-900 px-4 py-3 rounded-xl mb-4 border border-gray-700 font-bold focus:border-blue-500 outline-none">
+                <option value="">Загрузка...</option>
+            </select>
+            <button onclick="startReception()" class="big-btn bg-blue-600">ОК, ПРИСТУПАЮ</button>
+        </div>
+
+        <div id="scan-panel" style="display: none;" class="flex-1 flex flex-col">
             <div id="scanner-container"></div>
             
             <div class="text-center mb-4 text-gray-400 font-bold" id="last-barcode">Штрихкод: —</div>
             
-            <div class="flex gap-2 mb-4">
+            <div class="flex gap-2">
                 <input type="number" id="qty-input" value="1" class="w-24 text-center text-3xl font-black bg-gray-800 rounded-xl border border-gray-700">
-                <button onclick="packItem()" class="flex-1 big-btn bg-green-600 tracking-wide">УПАКОВАТЬ</button>
-            </div>
-            <div class="text-center text-sm text-gray-500 font-bold mt-2">
-                Вам не нужно выбирать ТЗ, система найдет его автоматически
+                <button onclick="addToReception()" class="flex-1 big-btn bg-green-600 tracking-wide">ПРИНЯТЬ</button>
             </div>
         </div>
     </div>
@@ -42,7 +47,32 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
     <script src="/static/js/api.js"></script>
     <script>
+        let currentReceptionId = null;
         let lastScannedCode = null;
+
+        async function loadReceptions() {
+            try {
+                const data = await apiAuthGet('/api/receptions/list');
+                const sel = document.getElementById('reception-select');
+                sel.innerHTML = '<option value="">-- Выберите приемку --</option>';
+                data.forEach(r => {
+                    sel.innerHTML += `<option value="${r.id}">[${r.id}] ${r.name} - ${r.status}</option>`;
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function startReception() {
+            const sel = document.getElementById('reception-select');
+            if (!sel.value) return alert('Выберите приемку!');
+            currentReceptionId = sel.value;
+            
+            document.getElementById('setup-panel').style.display = 'none';
+            document.getElementById('scan-panel').style.display = 'flex';
+            
+            initQuagga();
+        }
 
         function initQuagga() {
             Quagga.init({
@@ -73,30 +103,23 @@
             });
         }
 
-        async function packItem() {
+        async function addToReception() {
             if (!lastScannedCode) return alert('Сначала отсканируйте штрихкод!');
             const qty = parseInt(document.getElementById('qty-input').value) || 1;
             
             try {
-                // Ищем ТЗ
-                await apiAuthGet(`/api/receptions/global-task/${lastScannedCode}`);
-                
-                // Сразу пакуем (упрощено, без модалки)
-                await apiAuthPost('/api/receptions/global-pack', {
-                    barcode: lastScannedCode,
-                    quantity: qty,
-                    box_number: ""
+                await apiAuthPost(`/api/receptions/${currentReceptionId}/add`, {
+                    barcode: lastScannedCode, quantity: qty
                 });
-                
-                alert('Упаковано: ' + lastScannedCode);
+                alert('Успешно принято: ' + lastScannedCode);
                 lastScannedCode = null;
                 document.getElementById('last-barcode').innerText = "Штрихкод: —";
             } catch (e) {
-                alert('Ошибка: ' + (e.detail ? e.detail : e));
+                alert('Ошибка: ' + e);
             }
         }
 
-        window.onload = initQuagga;
+        window.onload = loadReceptions;
     </script>
 </body>
 </html>

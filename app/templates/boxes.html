@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Alto — Упаковка</title>
+    <title>Alto — Сборка</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/static/css/style.css">
     <style>
@@ -19,22 +19,35 @@
     <div class="max-w-md mx-auto w-full flex-1 flex flex-col">
         <div class="flex justify-between items-center mb-6">
             <button onclick="window.location.href='/dashboard'" class="px-4 py-2 bg-gray-800 rounded-xl font-bold text-gray-400">← Назад</button>
-            <h1 class="text-xl font-black text-blue-400">Упаковка</h1>
+            <h1 class="text-xl font-black text-blue-400">Сборка</h1>
             <div class="w-20"></div>
         </div>
 
-        <div id="scan-panel" class="flex-1 flex flex-col">
+        <div id="setup-panel" class="bg-gray-800 p-6 rounded-2xl mb-4 border border-gray-700">
+            <h2 class="text-lg font-bold mb-4">Выбор поставки</h2>
+            <select id="shipment-select" class="w-full bg-gray-900 px-4 py-3 rounded-xl mb-4 border border-gray-700 font-bold focus:border-blue-500 outline-none">
+                <option value="">Загрузка...</option>
+            </select>
+            <button onclick="startAssembly()" class="big-btn bg-blue-600">ОК, ПРИСТУПАЮ</button>
+        </div>
+
+        <div id="scan-panel" style="display: none;" class="flex-1 flex flex-col">
             <div id="scanner-container"></div>
             
             <div class="text-center mb-4 text-gray-400 font-bold" id="last-barcode">Штрихкод: —</div>
             
             <div class="flex gap-2 mb-4">
-                <input type="number" id="qty-input" value="1" class="w-24 text-center text-3xl font-black bg-gray-800 rounded-xl border border-gray-700">
-                <button onclick="packItem()" class="flex-1 big-btn bg-green-600 tracking-wide">УПАКОВАТЬ</button>
+                <div class="flex-1">
+                    <label class="text-xs text-gray-400 font-bold ml-2">НОМЕР КОРОБА</label>
+                    <input type="text" id="box-input" placeholder="Короб №" class="w-full mt-1 text-center text-2xl font-black bg-gray-800 rounded-xl border border-gray-700 py-3">
+                </div>
+                <div class="w-1/3">
+                    <label class="text-xs text-gray-400 font-bold ml-2">КОЛ-ВО</label>
+                    <input type="number" id="qty-input" value="1" class="w-full mt-1 text-center text-2xl font-black bg-gray-800 rounded-xl border border-gray-700 py-3">
+                </div>
             </div>
-            <div class="text-center text-sm text-gray-500 font-bold mt-2">
-                Вам не нужно выбирать ТЗ, система найдет его автоматически
-            </div>
+
+            <button onclick="addToShipment()" class="big-btn bg-green-600 tracking-wide mt-auto">СОБРАТЬ</button>
         </div>
     </div>
 
@@ -42,7 +55,32 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
     <script src="/static/js/api.js"></script>
     <script>
+        let currentShipmentId = null;
         let lastScannedCode = null;
+
+        async function loadShipments() {
+            try {
+                const data = await apiAuthGet('/api/shipments/list');
+                const sel = document.getElementById('shipment-select');
+                sel.innerHTML = '<option value="">-- Выберите поставку --</option>';
+                data.forEach(s => {
+                    sel.innerHTML += `<option value="${s.id}">[${s.id}] ${s.name} - ${s.status}</option>`;
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function startAssembly() {
+            const sel = document.getElementById('shipment-select');
+            if (!sel.value) return alert('Выберите поставку!');
+            currentShipmentId = sel.value;
+            
+            document.getElementById('setup-panel').style.display = 'none';
+            document.getElementById('scan-panel').style.display = 'flex';
+            
+            initQuagga();
+        }
 
         function initQuagga() {
             Quagga.init({
@@ -73,30 +111,24 @@
             });
         }
 
-        async function packItem() {
+        async function addToShipment() {
             if (!lastScannedCode) return alert('Сначала отсканируйте штрихкод!');
             const qty = parseInt(document.getElementById('qty-input').value) || 1;
+            const box = document.getElementById('box-input').value || "";
             
             try {
-                // Ищем ТЗ
-                await apiAuthGet(`/api/receptions/global-task/${lastScannedCode}`);
-                
-                // Сразу пакуем (упрощено, без модалки)
-                await apiAuthPost('/api/receptions/global-pack', {
-                    barcode: lastScannedCode,
-                    quantity: qty,
-                    box_number: ""
+                await apiAuthPost(`/api/shipments/${currentShipmentId}/scan`, {
+                    barcode: lastScannedCode, quantity: qty, box_number: box
                 });
-                
-                alert('Упаковано: ' + lastScannedCode);
+                alert('Собрано: ' + lastScannedCode + ' в ' + (box ? 'короб ' + box : 'свободный объем'));
                 lastScannedCode = null;
                 document.getElementById('last-barcode').innerText = "Штрихкод: —";
             } catch (e) {
-                alert('Ошибка: ' + (e.detail ? e.detail : e));
+                alert('Ошибка: ' + e);
             }
         }
 
-        window.onload = initQuagga;
+        window.onload = loadShipments;
     </script>
 </body>
 </html>

@@ -93,18 +93,18 @@ async def dashboard_page(request: Request):
 
 
 @app.get("/scanner")
-async def scanner_page(request: Request, mode: str = None):
-    return templates.TemplateResponse("scanner.html", {"request": request, "mode": mode})
+async def scanner_page(request: Request):
+    return templates.TemplateResponse("scanner.html", {"request": request})
 
 
 @app.get("/reception")
 async def reception_page(request: Request):
-    return templates.TemplateResponse("scanner.html", {"request": request, "mode": "reception"})
+    return templates.TemplateResponse("receipt.html", {"request": request})
 
 
 @app.get("/shipment")
 async def shipment_page(request: Request):
-    return templates.TemplateResponse("scanner.html", {"request": request, "mode": "shipment"})
+    return templates.TemplateResponse("boxes.html", {"request": request})
 
 
 @app.get("/stock")
